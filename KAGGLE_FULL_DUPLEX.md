@@ -68,7 +68,15 @@ os.environ["SMART_TURN_ENABLED"]="1"
 os.environ["ALLOW_BACKCHANNEL"]="0"  # enable only after duplex verification
 ```
 
-The free OpenRouter router is optional: set `LLM_BASE_URL` / `LLM_MODEL` to any other **OpenAI-compatible streaming** model you already have permission to use. `openrouter/free` is rate limited and may pick different models; it's not a guaranteed always-free unlimited reasoning service. Never place API keys in code or GitHub.
+To use a **fully self-hosted free LLM with no API key**, replace the LLM entries in cell C with:
+
+```python
+os.environ["LLM_BACKEND"]="local"
+os.environ["LOCAL_LLM_MODEL"]="Qwen/Qwen3-1.7B"
+os.environ["LOCAL_LLM_DEVICE"]="cuda:0"
+```
+
+Install `transformers>=4.51,<5` (included in requirements). This competes with Whisper for GPU0 memory and may increase latency. The free OpenRouter router is optional: set `LLM_BASE_URL` / `LLM_MODEL` to any other **OpenAI-compatible streaming** model you already have permission to use. `openrouter/free` is rate limited and may pick different models; it's not a guaranteed always-free unlimited reasoning service. Never place API keys in code or GitHub.
 
 ### Kaggle cell D — test models and start server
 

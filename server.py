@@ -55,7 +55,7 @@ async def ws_session(ws:WebSocket):
             history.append({"role":"assistant","content":reply})
             await emit({"type":"reply","text":reply})
             lang="ta" if any("\u0b80"<=ch<="\u0bff" for ch in text+reply) else "en"
-            for chunk in re.split(r"(?<=[.!?।])\\s+",reply):
+            for chunk in re.split(r"(?<=[.!?।])\s+",reply):
                 if v!=version:return
                 if not chunk.strip():continue
                 audio,rate=await speak(chunk,lang)

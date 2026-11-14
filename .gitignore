@@ -2,3 +2,13 @@
 .venv/
 __pycache__/
 *.pyc
+
+# Keep cloned-voice source assets and tokens out of this PUBLIC repository
+voices/*.wav
+voices/*.mp3
+voices/*.txt
+voices/*.pt
+voices.zip
+*.log
+.env.*
+!.env.example

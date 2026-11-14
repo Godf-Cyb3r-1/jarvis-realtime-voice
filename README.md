@@ -25,9 +25,12 @@ Old `client.py`, `server.py` and `gpu_server.py` are superseded prototypes and s
 - **ASR:** faster-whisper on Kaggle GPU0. English/Tamil/Tanglish accuracy needs live evaluation.
 - **Turn detection:** Smart Turn v3.2 CPU ONNX, with conservative pause fallback.
 - **Voice:** OmniVoice zero-shot cloned English/Tamil on GPU1, reference prompts loaded privately from Kaggle.
-- **LLM:** OpenAI-compatible model endpoint (for example OpenRouter free tier, rate limited).
+- **LLM:** OpenAI-compatible model endpoint (OpenRouter free tier, rate limited), or optional fully self-hosted Qwen3-1.7B using `LLM_BACKEND=local` (no API key; competes with ASR on GPU0).
 - **Audio:** local Windows WebRTC VAD, optional `pywebrtc-audio` AEC.
 - **Transport:** WSS, per-session bearer token in Authorization header, optional Cloudflare development tunnel.
+
+## Completely free LLM option
+Set `LLM_BACKEND=local` and `LOCAL_LLM_MODEL=Qwen/Qwen3-1.7B` on Kaggle to run a 1.7B non-thinking conversational model with no external LLM API. This needs additional GPU memory and is less capable than a larger hosted model. The default API option can use `openrouter/free` but is rate-limited. Local inference is not yet tested on T4.
 
 ## Truth-in-testing
 Unit tests and Python syntax checks are not a substitute for Kaggle T4 inference, Tamil QA, an actual microphone-to-speaker call, echo-cancellation benchmarks and user barge-in timing. See acceptance criteria before calling this human-like.

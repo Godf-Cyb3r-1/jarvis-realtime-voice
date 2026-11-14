@@ -55,8 +55,8 @@ def split_ready(buffer: str, force: bool = False) -> tuple[list[str], str]:
         m = re.search(r"[.!?।！？](?:\s+|$)", buffer)
         if m:
             cut = m.end()
-        elif len(buffer) >= 115:
-            cut = max(buffer.rfind(",", 30, 115), buffer.rfind(" ", 60, 115))
+        elif len(buffer) >= 78:
+            cut = max(buffer.rfind(",", 20, 78), buffer.rfind(" ", 40, 78))
             if cut < 0:
                 break
             cut += 1

@@ -1,0 +1,14 @@
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30
+numpy>=1.26,<3
+faster-whisper>=1.1
+httpx>=0.27
+python-dotenv>=1
+soundfile>=0.12
+scipy>=1.11
+huggingface_hub>=0.25
+transformers>=4.45
+onnxruntime>=1.19
+edge-tts>=7
+# GPU-only voice cloning: install separately after selecting compatible torch:
+# pip install omnivoice

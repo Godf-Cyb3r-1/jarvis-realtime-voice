@@ -1,0 +1,5 @@
+websockets>=13
+sounddevice>=0.5
+numpy>=1.26,<3
+python-dotenv>=1
+webrtcvad-wheels>=2.0

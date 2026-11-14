@@ -151,6 +151,12 @@ class Session:
                     asyncio.create_task(ack())
         self.endpoint_task=asyncio.create_task(decide())
 
+    async def resume(self):
+        if self.mode not in ("LISTEN","WAIT"):return
+        if self.endpoint_task and not self.endpoint_task.done():
+            self.endpoint_task.cancel()
+        if self.mode=="WAIT":await self.state("LISTEN")
+
     async def commit(self):
         if self.mode not in ("LISTEN","WAIT"):return
         data=bytes(self.samples)
@@ -269,6 +275,8 @@ async def duplex_websocket(ws:WebSocket):
                         if len(s.samples)>RATE*2*45:s.samples=s.samples[-RATE*2*45:]
                 elif kind=="partial":
                     await s.partial()
+                elif kind=="resume":
+                    await s.resume()
                 elif kind=="pause":
                     await s.pause(max(0,min(int(event.get("silence_ms",0)),15000)))
                 elif kind=="interrupt":

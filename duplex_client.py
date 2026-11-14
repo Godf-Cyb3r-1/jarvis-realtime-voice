@@ -122,6 +122,8 @@ async def main():
                             local_mode="IDLE"
                             preroll=[]
                     elif local_mode=="USER":
+                        if active and trailing_silence>=300:
+                            await ws.send(json.dumps({"type":"resume"}))
                         await ws.send(json.dumps({"type":"audio","pcm16":base64.b64encode(frame).decode()}))
                         trailing_silence=0 if active else trailing_silence+FRAME_MS
                         if now-last_partial_at>=float(os.getenv("PARTIAL_INTERVAL","0.8")):

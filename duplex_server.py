@@ -44,6 +44,11 @@ async def transcribe(samples: np.ndarray) -> str:
         return await asyncio.to_thread(run)
 
 async def llm_tokens(messages: list[dict]) -> AsyncIterator[str]:
+    if os.getenv("LLM_BACKEND","api")=="local":
+        from local_llm import stream_local
+        async for part in stream_local(messages):
+            yield part
+        return
     base=os.getenv("LLM_BASE_URL","").rstrip("/")
     model=os.getenv("LLM_MODEL","")
     if not base or not model:

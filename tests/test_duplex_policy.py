@@ -23,7 +23,7 @@ class DuplexPolicyTests(unittest.TestCase):
     def test_llm_chunks(self):
         a, b = split_ready("Hi! How are you? I am")
         self.assertEqual(a, ["Hi!", "How are you?"])
-        self.assertEqual(b, " I am")
+        self.assertEqual(b, "I am")
         a, b = split_ready(b, force=True)
         self.assertEqual(a, ["I am"])
         self.assertEqual(b, "")

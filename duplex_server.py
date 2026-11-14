@@ -90,6 +90,8 @@ class Session:
             "English, Tamil or Tanglish as spoken by the user. Avoid robotic repetitions, "
             "habitual greetings or filler labels. You can respond to a correction directly."}]
         self.t0=time.monotonic()
+        self.committed_at=self.t0
+        self.first_audio=False
 
     async def emit(self,kind,**fields):
         async with self.lock:
@@ -109,6 +111,8 @@ class Session:
 
     async def begin(self):
         await self.cancel_response()
+        self.first_audio=False
+        self.t0=time.monotonic()
         self.samples.clear()
         await self.state("LISTEN")
 
@@ -167,6 +171,7 @@ class Session:
         data=bytes(self.samples)
         self.samples.clear()
         await self.state("THINK")
+        self.committed_at=time.monotonic()
         version=self.turn
         async def run():
             try:
@@ -175,6 +180,7 @@ class Session:
                 if not transcript:
                     await self.state("IDLE")
                     return
+                await self.emit("metric",name="final_asr_ms",value=round((time.monotonic()-self.committed_at)*1000),turn=version)
                 await self.emit("transcript",text=transcript,turn=version)
                 self.history.append({"role":"user","content":transcript})
                 await self.respond(version)
@@ -185,6 +191,9 @@ class Session:
         self.response_task=asyncio.create_task(run())
 
     async def send_pcm(self,audio,version,role="speech"):
+        if role=="speech" and not self.first_audio and version==self.turn:
+            self.first_audio=True
+            await self.emit("metric",name="first_pcm_after_commit_ms",value=round((time.monotonic()-self.committed_at)*1000),turn=version)
         pcm=np.clip(np.asarray(audio,dtype=np.float32).reshape(-1),-1,1)
         pcm=(pcm*32767).astype("<i2")
         for offset in range(0,len(pcm),RATE//8):

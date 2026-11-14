@@ -81,6 +81,11 @@ pcm=synth.generate("Hello, I am Jarvis.", "en")
 print("OmniVoice sample count:",len(pcm))
 from IPython.display import Audio, display
 display(Audio(pcm,rate=16000))
+# Release GPU memory before launching a separate server process:
+del synth
+import gc
+gc.collect()
+__import__("torch").cuda.empty_cache()
 ```
 
 If this fails, collect the actual exception (don't assume voice cloning is working).

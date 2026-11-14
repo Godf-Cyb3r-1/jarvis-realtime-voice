@@ -11,6 +11,6 @@ jobs:
         with:
           python-version: "3.11"
       - name: Compile all Python modules without GPUs
-        run: python -m compileall -q duplex_policy.py smart_turn_adapter.py tts_engine.py duplex_audio.py duplex_server.py duplex_client.py
+        run: python -m compileall -q duplex_policy.py smart_turn_adapter.py tts_engine.py duplex_audio.py duplex_server.py duplex_client.py local_llm.py
       - name: Verify turn-taking edge cases
         run: python -m unittest discover -s tests -p 'test_*.py' -v

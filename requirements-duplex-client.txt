@@ -1,0 +1,7 @@
+numpy>=1.26,<3
+sounddevice>=0.5
+websockets>=13
+python-dotenv>=1
+webrtcvad-wheels>=2.0
+# Optional acoustic echo cancellation:
+# pip install pywebrtc-audio

@@ -63,6 +63,8 @@ async def main():
                 elif kind=="overlap_result":
                     print(f"\n[overlap: {event['decision']}] {event.get('text','')}")
                     audio.restore()
+                elif kind=="metric":
+                    print(f"\\n[metric] {event.get('name')}: {event.get('value')} ms")
                 elif kind in ("warning","error"):
                     print(f"\n[{kind}:{event.get('component','')}] {event.get('message','')}")
         reader=asyncio.create_task(receive())

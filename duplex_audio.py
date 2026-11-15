@@ -116,6 +116,13 @@ class FullDuplexAudio:
         mic=_device_from_env("MIC_DEVICE")
         speaker=_device_from_env("SPEAKER_DEVICE")
         device=(mic,speaker) if mic is not None or speaker is not None else None
+        try:
+            mic_name=sd.query_devices(mic,"input")["name"]
+            speaker_name=sd.query_devices(speaker,"output")["name"]
+        except Exception as exc:
+            raise RuntimeError("Invalid input/output device. Run python -m sounddevice") from exc
+        print(f"[audio-device] Input: {mic_name}",flush=True)
+        print(f"[audio-device] Output: {speaker_name}",flush=True)
         self._stream=sd.RawStream(samplerate=RATE,channels=(1,1),
             dtype="int16",blocksize=FRAME,callback=self._callback,
             latency="low",device=device)

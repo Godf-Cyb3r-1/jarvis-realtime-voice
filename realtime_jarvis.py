@@ -432,7 +432,7 @@ class Jarvis:
                 if int(e.get("turn",-1))!=self.active_audio_turn:
                     continue
                 if e.get("segment")==0 and e.get("part")==0 and int(e.get("turn",-1)) not in self.output_measured:
-                    print("[audio] received first speech PCM from Kaggle B")
+                    print(f"[audio] first speech PCM received; output_gain={self.audio.output_gain:.2f}")
                 pcm=np.frombuffer(base64.b64decode(e["pcm16"]),dtype="<i2").copy()
                 self.audio.enqueue(pcm)
                 received=int(e["turn"])

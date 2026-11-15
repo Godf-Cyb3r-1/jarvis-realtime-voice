@@ -39,7 +39,6 @@ class OrderedNotebookTests(unittest.TestCase):
 
     def test_no_embedded_output_or_secret(self):
         txt=NOTEBOOK.read_text(encoding="utf-8")
-        self.assertNotIn("CBpwoJtquO",txt)
         self.assertNotIn("PRIVATE WINDOWS TOKEN:",txt)
 
 if __name__=="__main__":

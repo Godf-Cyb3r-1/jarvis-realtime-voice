@@ -81,6 +81,7 @@ class Jarvis:
         self.last_ack=-1000.0
         self.response_task=None
         self.active_audio_turn=-1
+        self.tts_pending=0
         self.spec_task=None
         self.spec_queue=None
         self.spec_text=""
@@ -106,6 +107,7 @@ class Jarvis:
         self.response_task=None
         old=self.active_audio_turn
         self.active_audio_turn=-1
+        self.tts_pending=0
         self.audio.flush()
         if old>=0:
             await self.to_tts("tts_cancel",turn=old)
@@ -119,7 +121,7 @@ class Jarvis:
         self.probed=False
         self.probability=None
         self.stable=""
-        self.overlap=(self.audio.playing or
+        self.overlap=(self.audio.playing or self.tts_pending>0 or
                       bool(self.response_task and not self.response_task.done()))
         self.yielded=False
         self.discard_spec()
@@ -179,8 +181,10 @@ class Jarvis:
                     ack="சரி." if any("\u0b80"<=c<="\u0bff" for c in self.stable) else "Mm-hmm."
                     ack_turn=self.turn*10
                     self.active_audio_turn=ack_turn
+                    self.tts_pending+=1
                     await self.to_tts("tts_speak",turn=ack_turn,segment=-1,
-                                      language="ta" if ack=="சரி." else "en",text=ack)
+                                      language="ta" if ack=="சரி." else "en",text=ack,
+                                      cache_key="ack-ta" if ack=="சரி." else "ack-en")
                     print("[backchannel]",ack)
                 if endpoint_ready(self.silence_ms,self.stable,self.probability):
                     self.capturing=False
@@ -331,6 +335,7 @@ class Jarvis:
 
     async def speak(self,reply_turn,segment,text):
         print(f"[speak {segment}]",text)
+        self.tts_pending+=1
         await self.to_tts("tts_speak",turn=reply_turn,segment=segment,
                           text=text,language=self.language(text),
                           cache_key=self.cache_key(reply_turn//10,text))
@@ -341,6 +346,7 @@ class Jarvis:
             kind=e.get("type")
             if kind=="ready":
                 print("[tts] connected:",e.get("rate"),"Hz")
+                await self.to_tts("tts_prefill",cache_key="ack-en",text="Mm-hmm.",language="en")
             elif kind=="tts_audio":
                 if int(e.get("turn",-1))!=self.active_audio_turn:
                     continue
@@ -353,7 +359,16 @@ class Jarvis:
             elif kind in ("error","warning"):
                 print("[tts-"+kind+"]",e.get("message"))
             elif kind=="prefill_ready":
-                print("[prefill] OmniVoice cached first clause")
+                key=e.get("cache_key","")
+                if key=="ack-en":
+                    await self.to_tts("tts_prefill",cache_key="ack-ta",text="சரி.",language="ta")
+                elif key=="ack-ta":
+                    print("[prefill] both short acknowledgments cached")
+                else:
+                    print("[prefill] speculative first clause prepared")
+            elif kind=="tts_done":
+                if int(e.get("turn",-1))==self.active_audio_turn:
+                    self.tts_pending=max(0,self.tts_pending-1)
 
     async def run(self):
         print("[Jarvis] continuous ear + local Groq + remote cloned voice")

@@ -43,7 +43,7 @@ def configuration(backend=None, environ=None):
     else:
         raise ValueError("LLM_BACKEND must be groq, gemini, api, or local")
     if not key.strip():
-        raise RuntimeError(f"Missing {key_name}: set this Kaggle secret before starting Jarvis")
+        raise RuntimeError(f"Missing {key_name}: set it in the local Windows .env (or server environment)")
     if not model.strip():
         raise RuntimeError(f"No model configured for {selected}")
     return selected, base, model, key

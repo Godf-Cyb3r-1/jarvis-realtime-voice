@@ -13,6 +13,6 @@ jobs:
       - name: Install offline-test dependencies
         run: python -m pip install numpy httpx
       - name: Compile all Python modules without GPUs
-        run: python -m compileall -q duplex_policy.py smart_turn_adapter.py tts_engine.py duplex_audio.py duplex_server.py duplex_client.py local_llm.py gpu_guard.py local_audio_smoke.py hosted_llm.py asr_quality.py tts_longform.py realtime_protocol.py realtime_stt_server.py realtime_tts_server.py realtime_jarvis.py
+        run: python -m compileall -q duplex_policy.py smart_turn_adapter.py tts_engine.py duplex_audio.py duplex_server.py duplex_client.py local_llm.py gpu_guard.py local_audio_smoke.py hosted_llm.py asr_quality.py tts_longform.py realtime_protocol.py realtime_stt_server.py realtime_tts_server.py realtime_jarvis.py realtime_voice_smoke.py
       - name: Verify turn-taking edge cases
         run: python -m unittest discover -s tests -p 'test_*.py' -v

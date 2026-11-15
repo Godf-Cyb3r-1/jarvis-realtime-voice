@@ -225,6 +225,7 @@ class Jarvis:
                                        if not t.cancelled() and t.exception() else None)
             elif kind in ("error","warning"):
                 print("[stt-"+kind+"]",e.get("message"))
+        raise ConnectionError("STT WebSocket disconnected")
 
     async def speculate(self,turn,stable,q):
         """Warm Groq and possibly first TTS phrase while user is still talking."""
@@ -374,6 +375,7 @@ class Jarvis:
             elif kind=="tts_done":
                 if int(e.get("turn",-1))==self.active_audio_turn:
                     self.tts_pending=max(0,self.tts_pending-1)
+        raise ConnectionError("TTS WebSocket disconnected")
 
     async def run(self):
         print("[Jarvis] continuous ear + local Groq + remote cloned voice")
@@ -382,21 +384,36 @@ class Jarvis:
             await asyncio.gather(self.microphone(),self.listen_stt(),self.listen_tts())
 
 async def main():
-    # Fail immediately instead of pretending to speak when the Groq key is missing.
+    # Fail immediately if no local Groq key. Re-read .env on reconnect so
+    # updated temporary Kaggle tunnel URLs take effect without restarting Jarvis.
     configuration("groq")
-    stt_url=ws_url("STT_WS_URL")
-    tts_url=ws_url("TTS_WS_URL")
-    async with (websockets.connect(stt_url,additional_headers={
-                    "Authorization":"Bearer "+need("STT_WS_TOKEN")},max_size=8*1024*1024,
-                    ping_interval=20,ping_timeout=30) as stt,
-                websockets.connect(tts_url,additional_headers={
-                    "Authorization":"Bearer "+need("TTS_WS_TOKEN")},max_size=16*1024*1024,
-                    ping_interval=20,ping_timeout=30) as tts):
-        jarvis=Jarvis(stt,tts,asyncio.get_running_loop())
-        await jarvis.run()
+    attempt=0
+    while True:
+        load_dotenv(override=True)
+        stt_url=ws_url("STT_WS_URL")
+        tts_url=ws_url("TTS_WS_URL")
+        try:
+            async with (websockets.connect(stt_url,additional_headers={
+                            "Authorization":"Bearer "+need("STT_WS_TOKEN")},
+                            max_size=8*1024*1024,ping_interval=20,ping_timeout=30) as stt,
+                        websockets.connect(tts_url,additional_headers={
+                            "Authorization":"Bearer "+need("TTS_WS_TOKEN")},
+                            max_size=16*1024*1024,ping_interval=20,ping_timeout=30) as tts):
+                print("[network] Both Kaggle sessions connected")
+                attempt=0
+                jarvis=Jarvis(stt,tts,asyncio.get_running_loop())
+                await jarvis.run()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            attempt+=1
+            delay=min(2**min(attempt,4),20)
+            print(f"[network] {type(exc).__name__}: {str(exc)[:190]}")
+            print(f"[network] Retrying in {delay}s; update .env if Kaggle restarted")
+            await asyncio.sleep(delay)
 
 if __name__=="__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\nJarvis stopped.")
+        print("\\nJarvis stopped.")

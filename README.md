@@ -1,5 +1,14 @@
 # Jarvis Realtime Voice — Full-Duplex Research Prototype
 
+**New two-Kaggle distributed Jarvis (research implementation):**
+[Full setup and papers](DISTRIBUTED_REALTIME_JARVIS.md) |
+[Kaggle A continuous STT notebook](notebooks/Jarvis_Kaggle_A_Continuous_STT.ipynb) |
+[Kaggle B cloned-voice TTS notebook](notebooks/Jarvis_Kaggle_B_OmniVoice_TTS.ipynb) |
+[Windows Groq controller](realtime_jarvis.py).
+
+The Windows controller owns Groq, local SQLite memory, continuous microphone and speaker, anticipatory prefill, backchannels and interruption. **The old single-Kaggle client and notebook below are kept for comparison; use the new distributed setup instead if running separate GPUs.** This build still needs live testing with your own two Kaggle sessions and Windows hardware.
+
+
 **Latest (November 2026):** [Temporary Groq/Gemini + Whisper recovery guide](GROQ_GEMINI_QUICK_FIX.md) | [Updated ordered Kaggle notebook](notebooks/Jarvis_Kaggle_RUN_IN_ORDER.ipynb). This replaces the old local Qwen default for low-latency voice testing. **Previous local-Qwen instructions further below are historical; do not mix their configuration with the updated notebook.**
 
 **Current version:** concurrent listening and speaking implemented, research-driven upgrades in progress. This is an engineered L0 duplex assistant, **not** a trained native full-duplex speech model and **not** yet validated end-to-end on Kaggle or Windows.

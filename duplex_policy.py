@@ -1,6 +1,7 @@
 """Deterministic speech-floor policy; no model/GPU dependencies."""
 from dataclasses import dataclass
 import re
+import os
 
 BACKCHANNELS = {
     "hmm", "hm", "mm", "mhm", "mmhm", "uh huh", "uh-huh", "aha",
@@ -45,7 +46,7 @@ def should_finish(silence_ms: int, probability: float | None, settings: TurnSett
     if silence_ms >= settings.timeout_ms:
         return True
     if probability is None:
-        return silence_ms >= 1100
+        return silence_ms >= int(os.getenv("ENDPOINT_FALLBACK_MS","850"))
     return probability >= settings.completion_threshold
 
 def split_ready(buffer: str, force: bool = False) -> tuple[list[str], str]:

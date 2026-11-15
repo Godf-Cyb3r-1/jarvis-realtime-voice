@@ -27,7 +27,7 @@ In PowerShell:
 cd C:\Users\LENOVO\jarvis-realtime-voice
 git pull --ff-only
 .\.venv\Scripts\python.exe -m pip install -r requirements-realtime-windows.txt
-Copy-Item realtime_windows.env.example .env -ErrorAction SilentlyContinue
+if (-not (Test-Path .env)) { Copy-Item realtime_windows.env.example .env }
 notepad .env
 ```
 

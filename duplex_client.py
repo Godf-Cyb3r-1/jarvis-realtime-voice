@@ -86,7 +86,7 @@ async def main():
                     if local_mode=="IDLE":
                         preroll=(preroll+[frame])[-15:]
                         voice_count=voice_count+1 if active else max(0,voice_count-1)
-                        if voice_count<3:continue
+                        if voice_count < int(os.getenv("VAD_ONSET_FRAMES","5")):continue
                         voice_count=0
                         trailing_silence=0
                         last_partial_at=now

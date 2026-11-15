@@ -57,6 +57,11 @@ class FullDuplexAudio:
         with self._lock:
             return self._first_output_time
 
+    @property
+    def output_gain(self):
+        with self._lock:
+            return self._gain
+
     def duck(self, gain=0.3):
         with self._lock:
             self._gain=float(gain)

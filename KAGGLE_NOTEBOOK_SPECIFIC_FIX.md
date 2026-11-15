@@ -118,6 +118,7 @@ server_log=open("/kaggle/working/jarvis_server.log","w")
 server=subprocess.Popen(["python","-m","uvicorn","duplex_server:app",
   "--host","127.0.0.1","--port","8091"],
   cwd=repo,env=os.environ.copy(),stdout=server_log,stderr=subprocess.STDOUT)
+r=None
 for attempt in range(120):
     if server.poll() is not None:break
     try:
@@ -125,8 +126,7 @@ for attempt in range(120):
         if r.ok:break
     except requests.RequestException:pass
     time.sleep(2)
-else: r=None
-if not r or not r.ok:
+if r is None or not r.ok:
     print(open("/kaggle/working/jarvis_server.log").read()[-4500:])
     raise RuntimeError("Server did not become healthy")
 print("Health:",r.json())

@@ -12,8 +12,13 @@ import threading
 def _models():
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
-    name=os.getenv("LOCAL_LLM_MODEL","Qwen/Qwen3-1.7B")
+    name=os.getenv("LOCAL_LLM_MODEL","Qwen/Qwen3-0.6B")
     gpu=os.getenv("LOCAL_LLM_DEVICE","cuda:0")
+    if gpu.startswith("cuda:"):
+        from gpu_guard import index_for
+        wanted=index_for("LOCAL_LLM_GPU_INDEX",default=0)
+        gpu=f"cuda:{wanted}"
+    print(f"[llm] Loading {name} on {gpu}",flush=True)
     tokenizer=AutoTokenizer.from_pretrained(name)
     model=AutoModelForCausalLM.from_pretrained(name,dtype=torch.float16).to(gpu)
     model.eval()

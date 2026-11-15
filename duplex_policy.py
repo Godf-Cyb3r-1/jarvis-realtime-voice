@@ -28,6 +28,14 @@ def overlap_action(text: str, duration_ms: int) -> str:
         return "CONTINUE"
     if not t:
         return "HOLD"
+    # A very short genuine question is an interruption too; don't treat
+    # "What now?" or "என்ன?" as a listener backchannel.
+    if (text.strip().endswith(("?", "？")) and duration_ms >= 200):
+        return "YIELD"
+    if (t.split()[0] in ("what","why","how","when","where","who",
+                         "என்ன","ஏன்","எப்படி","எங்கே")
+            and duration_ms >= 300):
+        return "YIELD"
     if len(t.split()) >= 3 or duration_ms >= 850:
         return "YIELD"
     # Short acknowledgement while Jarvis speaks is not an interruption.

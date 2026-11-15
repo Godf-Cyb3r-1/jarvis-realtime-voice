@@ -384,10 +384,16 @@ class Jarvis:
             kind=e.get("type")
             if kind=="ready":
                 print("[tts] connected:",e.get("rate"),"Hz")
-                await self.to_tts("tts_prefill",cache_key="ack-en",text="Mm-hmm.",language="en")
+                # Low-latency debugging: do NOT warm OmniVoice on connect while
+                # the first user reply is waiting for the same GPU.
+                if os.getenv("TTS_PREWARM_ACKS","0")=="1":
+                    await self.to_tts("tts_prefill",cache_key="ack-en",
+                                      text="Mm-hmm.",language="en")
             elif kind=="tts_audio":
                 if int(e.get("turn",-1))!=self.active_audio_turn:
                     continue
+                if e.get("segment")==0 and e.get("part")==0 and int(e.get("turn",-1)) not in self.output_measured:
+                    print("[audio] received first speech PCM from Kaggle B")
                 pcm=np.frombuffer(base64.b64decode(e["pcm16"]),dtype="<i2").copy()
                 self.audio.enqueue(pcm)
                 received=int(e["turn"])

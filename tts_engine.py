@@ -5,6 +5,7 @@ import subprocess
 import tempfile
 import threading
 from pathlib import Path
+from gpu_guard import index_for,inventory
 import numpy as np
 
 SAMPLE_RATE=16000
@@ -25,7 +26,10 @@ class OmniVoiceEngine:
         import torch
         from omnivoice import OmniVoice
         if not torch.cuda.is_available():raise RuntimeError("OmniVoice needs a CUDA GPU")
-        gpu=int(os.getenv("TTS_GPU",str(1 if torch.cuda.device_count()>1 else 0)))
+        gpu=index_for("TTS_GPU",default=1)
+        stats=inventory()
+        print(f"[tts] loading OmniVoice on logical GPU {gpu}; GPU state={stats['devices']}",flush=True)
+        torch.cuda.set_device(gpu)
         self.model=OmniVoice.from_pretrained(os.getenv("OMNIVOICE_MODEL","k2-fsa/OmniVoice"),
             device_map=f"cuda:{gpu}",dtype=torch.float16,load_asr=False)
         root=Path(os.getenv("VOICE_DIR","voices"))

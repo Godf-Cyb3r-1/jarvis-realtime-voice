@@ -8,7 +8,7 @@ import re
 
 SUPPORTED_ALIASES = {
     "[chuckle]": "[laughter]",
-    "[short pause]": "...",
+    "[short pause]": "",  # handled by the joining gap, not synthesized alone
 }
 
 def normalize_expression_tags(text: str) -> str:

@@ -30,7 +30,7 @@ def load_final_handler():
 class FinalRaceTests(unittest.IsolatedAsyncioTestCase):
     @classmethod
     def setUpClass(cls):
-        cls.handler=load_final_handler()
+        cls.handler=staticmethod(load_final_handler())
 
     def make_fake(self,turn=2,voice_ms=0,capturing=False,meta=None):
         return SimpleNamespace(

@@ -22,6 +22,7 @@ from faster_whisper import WhisperModel
 from duplex_policy import overlap_action, should_finish, split_ready
 from smart_turn_adapter import completion_probability
 from tts_engine import VoiceEngine
+from tts_longform import chunk_text, combine_pcm
 from hosted_llm import SYSTEM_PROMPT, stream_reply
 from asr_quality import transcribe_audio
 from gpu_guard import inventory, index_for
@@ -303,17 +304,36 @@ async def debug_llm(payload:dict, authorization:str=Header(default="")):
 
 @app.post("/debug/tts")
 async def debug_tts(payload:dict,authorization:str=Header(default="")):
-    """Runs OmniVoice (or explicitly selected Edge) in the actual server process."""
+    """Synthesize ALL input text in server process, combining every speech chunk."""
     _require_token(authorization)
-    text=str(payload.get("text","Hello. I am Jarvis."))[:200]
+    text=payload.get("text","Hello. I am Jarvis.")
+    if not isinstance(text,str) or not text.strip():
+        raise HTTPException(400,detail="Provide nonempty text")
+    max_chars=int(os.getenv("TTS_MAX_TEXT_CHARS","5000"))
+    if len(text)>max_chars:
+        raise HTTPException(413,detail=f"Too much text: {len(text)} > {max_chars} chars. Nothing truncated.")
     lang="ta" if str(payload.get("language","en")).lower().startswith("ta") else "en"
     try:
         import io
         import soundfile as sf
-        samples=await voices.synthesize(text,lang)
+        chunks=chunk_text(text,max_chars=int(os.getenv("TTS_CHUNK_MAX_CHARS","100")))
+        if not chunks:
+            raise HTTPException(400,detail="No speech content")
+        pieces=[]
+        for i,chunk in enumerate(chunks,1):
+            print(f"[debug/tts] {lang} chunk {i}/{len(chunks)}: {chunk!r}",flush=True)
+            audio=await voices.synthesize(chunk,lang)
+            pieces.append(audio)
+        combined=combine_pcm(pieces,sample_rate=RATE,
+                             gap_ms=int(os.getenv("TTS_CHUNK_GAP_MS","100")))
         output=io.BytesIO()
-        sf.write(output,np.asarray(samples,dtype=np.float32),RATE,format="WAV")
-        return Response(content=output.getvalue(),media_type="audio/wav")
+        sf.write(output,combined,RATE,format="WAV")
+        return Response(content=output.getvalue(),media_type="audio/wav",
+                        headers={"X-TTS-Chunks":str(len(chunks)),
+                                 "X-TTS-Input-Characters":str(len(text)),
+                                 "X-TTS-Duration-Seconds":f"{len(combined)/RATE:.2f}"})
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(503,detail=f"TTS failed: {str(exc)[:350]}")
 

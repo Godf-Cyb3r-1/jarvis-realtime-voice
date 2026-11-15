@@ -14,6 +14,17 @@ import sounddevice as sd
 RATE=16000
 FRAME=320
 
+def _device_from_env(name):
+    """Choose PortAudio device ID or substring without changing OS defaults."""
+    value=os.getenv(name,"").strip()
+    if not value:
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return value
+
+
 class FullDuplexAudio:
     def __init__(self, loop):
         self.loop=loop
@@ -102,9 +113,12 @@ class FullDuplexAudio:
         self.loop.call_soon_threadsafe(put)
 
     def __enter__(self):
+        mic=_device_from_env("MIC_DEVICE")
+        speaker=_device_from_env("SPEAKER_DEVICE")
+        device=(mic,speaker) if mic is not None or speaker is not None else None
         self._stream=sd.RawStream(samplerate=RATE,channels=(1,1),
             dtype="int16",blocksize=FRAME,callback=self._callback,
-            latency="low")
+            latency="low",device=device)
         self._stream.start()
         return self
 

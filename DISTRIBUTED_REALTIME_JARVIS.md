@@ -149,7 +149,7 @@ For lower pitch, adjust OmniVoice's documented `OMNIVOICE_SPEED` if you want lon
 
 - Whisper Medium is re-decoding rolling audio on Kaggle rather than a purpose-trained causal streaming ASR, so partial latency and Tamil/Tanglish accuracy remain imperfect.
 - OmniVoice still generates each short phrase before sending its PCM chunks; this is **not** native incremental audio-token synthesis. Warm/cached first phrases help only when speculation succeeds.
-- Voice activity detection and short-utterance heuristics are not sufficient to guarantee perfect semantic turn-taking. Smart Turn is opt-in pending model setup and benchmarking.
+- Voice activity detection and short-utterance heuristics are not sufficient to guarantee perfect semantic turn-taking. Smart Turn is opt-in pending model setup and benchmarking. **Pipecat Smart Turn v3.2's published 23-language list does not include Tamil**, so do not assume it improves Tamil pauses without separate evaluation.
 - Stable partial exact-match prefill can waste Groq usage and GPU cycles if final text differs; turn it off with `ENABLE_PREFILL=0` if rate-limited.
 - Cloudflare Quick Tunnels are **temporary** and Kaggle notebooks are time-limited (documented notebook sessions typically capped), so this is experimental infrastructure rather than an always-on assistant. Do not use multiple Kaggle accounts to evade account quotas or platform policies.
 - With laptop speakers and no working AEC, feedback will trigger fake "user speech." **Start with headphones.**

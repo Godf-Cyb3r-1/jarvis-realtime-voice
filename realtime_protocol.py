@@ -36,9 +36,10 @@ class Hypothesis:
     def observe(self, text: str) -> tuple[str, bool]:
         self.revision += 1
         stable = common_prefix_words(self.text, text) if self.text else ""
-        changed = bool(stable and normalized(stable) != normalized(self.stable))
-        if changed:
-            self.stable = stable
+        changed = normalized(stable) != normalized(self.stable)
+        # An ASR revision can invalidate previously stable words. Propagate
+        # the empty/reduced prefix; never keep a contradictory old hypothesis.
+        self.stable = stable
         self.text = text
         return self.stable, changed
 

@@ -1,5 +1,7 @@
 # Run Jarvis Duplex v2 using free Kaggle T4 x2 and Windows
 
+**If you have CUDA out-of-memory or invalid device errors, use [KAGGLE_GPU_RECOVERY.md](KAGGLE_GPU_RECOVERY.md) instead of this original configuration.** The original GPU settings below are high-memory and retained for reference.
+
 **Status:** code committed and CPU policy tests provided; end-to-end GPU + microphone/audio hardware tests are **not yet executed**. This is an engineered duplex prototype; it cannot promise native-model-level conversational timing.
 
 ## 1. Kaggle notebook

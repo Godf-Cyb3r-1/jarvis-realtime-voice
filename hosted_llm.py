@@ -58,6 +58,9 @@ async def stream_reply(messages, backend=None, environ=None, transport=None):
         "temperature": 0.6,
         "max_tokens": int((os.environ if environ is None else environ).get("LLM_MAX_TOKENS", "140")),
     }
+    if provider == "groq":
+        request["reasoning_effort"] = "low"
+        request["include_reasoning"] = False
     timeout = httpx.Timeout(connect=10.0, read=45.0, write=15.0, pool=10.0)
     async with httpx.AsyncClient(timeout=timeout, transport=transport) as client:
         async with client.stream("POST", base + "/chat/completions",

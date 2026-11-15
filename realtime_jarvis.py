@@ -404,8 +404,16 @@ class Jarvis:
     async def run(self):
         print("[Jarvis] continuous ear + local Groq + remote cloned voice")
         print("[Jarvis] Headphones strongly recommended; Ctrl+C to stop.")
-        with self.audio:
-            await asyncio.gather(self.microphone(),self.listen_stt(),self.listen_tts())
+        try:
+            with self.audio:
+                # Structured concurrency cancels microphone/other socket tasks
+                # if either remote Kaggle service disconnects.
+                async with asyncio.TaskGroup() as tasks:
+                    tasks.create_task(self.microphone())
+                    tasks.create_task(self.listen_stt())
+                    tasks.create_task(self.listen_tts())
+        finally:
+            self.memory.db.close()
 
 async def main():
     # Fail immediately if no local Groq key. Re-read .env on reconnect so

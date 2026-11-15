@@ -45,7 +45,8 @@ class OmniVoiceEngine:
         with self.guard:
             output=self.model.generate(text=text,
                 voice_clone_prompt=self.prompts["ta" if language=="ta" else "en"],
-                num_step=int(os.getenv("OMNIVOICE_STEPS","16")))
+                num_step=int(os.getenv("OMNIVOICE_STEPS","16")),
+                speed=float(os.getenv("OMNIVOICE_SPEED","1.0")))
         return _to16k(output[0],getattr(self.model,"sampling_rate",24000))
 
 async def edge_generate(text,language):

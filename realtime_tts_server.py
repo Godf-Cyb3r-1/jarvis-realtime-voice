@@ -12,8 +12,9 @@ import time
 from collections import OrderedDict
 
 import numpy as np
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Header, HTTPException
 from realtime_protocol import RATE
+from fastapi.responses import Response
 from tts_engine import VoiceEngine
 from tts_longform import chunk_text
 
@@ -43,6 +44,29 @@ def cache_put(key,lang,text,audio):
 async def health():
     return {"ready":True,"service":"tts","provider":voices.provider,
             "sample_rate":RATE,"prefill_cache":len(cache)}
+
+@app.post("/debug/tts")
+async def debug_tts(payload:dict,authorization:str=Header(default="")):
+    """Authenticated Kaggle-only voice test; generates and concatenates full text."""
+    if not hmac.compare_digest(authorization,"Bearer "+TOKEN):
+        raise HTTPException(401,detail="Invalid bearer token")
+    text=payload.get("text","Hello Jarvis.")
+    if not isinstance(text,str) or not text.strip() or len(text)>5000:
+        raise HTTPException(400,detail="Text must be 1-5000 characters")
+    lang="ta" if str(payload.get("language","en")).startswith("ta") else "en"
+    try:
+        import io
+        import soundfile as sf
+        from tts_longform import combine_pcm
+        parts=chunk_text(text,max_chars=110)
+        pcm=combine_pcm([await synth(p,lang) for p in parts])
+        output=io.BytesIO()
+        sf.write(output,pcm,RATE,format="WAV")
+        return Response(content=output.getvalue(),media_type="audio/wav",
+            headers={"X-TTS-Chunks":str(len(parts)),
+                     "X-TTS-Input-Characters":str(len(text))})
+    except Exception as exc:
+        raise HTTPException(503,detail=f"OmniVoice failed: {str(exc)[:280]}")
 
 @app.websocket("/tts")
 async def socket(ws:WebSocket):

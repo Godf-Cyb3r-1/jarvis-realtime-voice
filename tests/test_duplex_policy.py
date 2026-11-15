@@ -10,6 +10,10 @@ class DuplexPolicyTests(unittest.TestCase):
             self.assertEqual(overlap_action(text, 300), "YIELD")
     def test_substantive_interruption(self):
         self.assertEqual(overlap_action("Actually I meant the other thing", 950), "YIELD")
+    def test_short_questions_interrupt_too(self):
+        for text in ("What now?", "Why?", "என்ன?"):
+            self.assertEqual(overlap_action(text, 320), "YIELD")
+
     def test_uncertain_overlap(self):
         self.assertEqual(overlap_action("", 300), "HOLD")
     def test_pause_does_not_equal_turn_end(self):

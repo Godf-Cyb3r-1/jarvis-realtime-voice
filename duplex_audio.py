@@ -7,6 +7,7 @@ import asyncio
 from collections import deque
 import os
 import threading
+import time
 import numpy as np
 import sounddevice as sd
 
@@ -22,6 +23,7 @@ class FullDuplexAudio:
         self._tail=b""
         self._gain=1.0
         self._recent_audio=False
+        self._first_output_time=None
         self._stream=None
         self.aec=None
         if os.getenv("AEC_ENABLED","0")=="1":
@@ -38,6 +40,12 @@ class FullDuplexAudio:
         with self._lock:
             return bool(self._pending or self._tail or self._recent_audio)
 
+    @property
+    def first_output_time(self):
+        """Monotonic time of the first PCM block given to the OS audio callback."""
+        with self._lock:
+            return self._first_output_time
+
     def duck(self, gain=0.3):
         with self._lock:
             self._gain=float(gain)
@@ -50,6 +58,7 @@ class FullDuplexAudio:
             self._pending.clear()
             self._tail=b""
             self._recent_audio=False
+            self._first_output_time=None
             self._gain=1.0
 
     def enqueue(self, samples):
@@ -68,6 +77,8 @@ class FullDuplexAudio:
                 out.extend(self._tail[:take])
                 self._tail=self._tail[take:]
             self._recent_audio=bool(out)
+            if out and self._first_output_time is None:
+                self._first_output_time=time.monotonic()
             gain=self._gain
         if len(out)<byte_count:out.extend(bytes(byte_count-len(out)))
         data=np.frombuffer(out,dtype="<i2").copy()

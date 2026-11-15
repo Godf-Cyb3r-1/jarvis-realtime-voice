@@ -16,7 +16,8 @@ from typing import AsyncIterator
 import httpx
 import numpy as np
 from dotenv import load_dotenv
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Header, HTTPException
+from fastapi.responses import Response
 from faster_whisper import WhisperModel
 from duplex_policy import overlap_action, should_finish, split_ready
 from smart_turn_adapter import completion_probability
@@ -289,6 +290,43 @@ async def health():
             "llm_backend":os.getenv("LLM_BACKEND","api"),
             "smart_turn":os.getenv("SMART_TURN_ENABLED","0")=="1",
             "gpu":inventory()}
+
+def _require_token(authorization):
+    if not hmac.compare_digest(authorization,"Bearer "+TOKEN):
+        raise HTTPException(status_code=401,detail="Invalid token")
+
+@app.post("/debug/llm")
+async def debug_llm(payload:dict, authorization:str=Header(default="")):
+    """Runs the configured LLM inside the server process, not a duplicate GPU instance."""
+    _require_token(authorization)
+    question=str(payload.get("text","Hello Jarvis. Please reply in one sentence."))[:500]
+    try:
+        answer=[]
+        async for delta in llm_tokens([
+            {"role":"system","content":"You are Jarvis. Reply in one concise sentence."},
+            {"role":"user","content":question}
+        ]):
+            answer.append(delta)
+            if sum(map(len,answer))>1000:break
+        return {"ok":True,"backend":os.getenv("LLM_BACKEND","api"),"reply":"".join(answer)}
+    except Exception as exc:
+        raise HTTPException(503,detail=f"LLM failed: {str(exc)[:350]}")
+
+@app.post("/debug/tts")
+async def debug_tts(payload:dict,authorization:str=Header(default="")):
+    """Runs OmniVoice (or explicitly selected Edge) in the actual server process."""
+    _require_token(authorization)
+    text=str(payload.get("text","Hello. I am Jarvis."))[:200]
+    lang="ta" if str(payload.get("language","en")).lower().startswith("ta") else "en"
+    try:
+        import io
+        import soundfile as sf
+        samples=await voices.synthesize(text,lang)
+        output=io.BytesIO()
+        sf.write(output,np.asarray(samples,dtype=np.float32),RATE,format="WAV")
+        return Response(content=output.getvalue(),media_type="audio/wav")
+    except Exception as exc:
+        raise HTTPException(503,detail=f"TTS failed: {str(exc)[:350]}")
 
 @app.websocket("/ws")
 async def duplex_websocket(ws:WebSocket):

@@ -6,6 +6,7 @@
 If Windows displays transcripts but nothing is spoken, especially after `CUDA out of memory` or `invalid device ordinal`, follow **[KAGGLE_GPU_RECOVERY.md](KAGGLE_GPU_RECOVERY.md)**. It includes smaller models, CUDA inventory, diagnostic LLM/TTS endpoints and safe notebook restart. Test `/debug/llm` and `/debug/tts` independently before retrying Windows.
 
 ## Start here
+- **[KAGGLE_NOTEBOOK_SPECIFIC_FIX.md](KAGGLE_NOTEBOOK_SPECIFIC_FIX.md)** — tailored to the uploaded Kaggle notebook, its raw dataset and CUDA restart errors.
 - **[KAGGLE_FULL_DUPLEX.md](KAGGLE_FULL_DUPLEX.md)** — detailed GPU + Windows setup from scratch, using your private English and Tamil references.
 - **[research/RESEARCH_AND_PLAN.md](research/RESEARCH_AND_PLAN.md)** — papers, architecture choices, human-like behavior test plan.
 - **[tests/test_duplex_policy.py](tests/test_duplex_policy.py)** — offline tests for natural pauses, listener backchannels and genuine interruptions.

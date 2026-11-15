@@ -7,6 +7,8 @@
 ## CUDA OOM / no spoken reply?
 If Windows displays transcripts but nothing is spoken, especially after `CUDA out of memory` or `invalid device ordinal`, follow **[KAGGLE_GPU_RECOVERY.md](KAGGLE_GPU_RECOVERY.md)**. It includes smaller models, CUDA inventory, diagnostic LLM/TTS endpoints and safe notebook restart. Test `/debug/llm` and `/debug/tts` independently before retrying Windows.
 
+**Latest speech-length fix:** `/debug/tts` no longer silently clips text to 200 characters. It synthesizes all sentence/word chunks, joins them into one WAV and returns `X-TTS-Chunks` plus `X-TTS-Input-Characters` headers. The [Kaggle notebook](notebooks/Jarvis_Kaggle_RUN_IN_ORDER.ipynb) includes an optional long-form test in Step 9B.
+
 ## Start here
 - **[KAGGLE_NOTEBOOK_SPECIFIC_FIX.md](KAGGLE_NOTEBOOK_SPECIFIC_FIX.md)** — tailored to the uploaded Kaggle notebook, its raw dataset and CUDA restart errors.
 - **[KAGGLE_FULL_DUPLEX.md](KAGGLE_FULL_DUPLEX.md)** — detailed GPU + Windows setup from scratch, using your private English and Tamil references.

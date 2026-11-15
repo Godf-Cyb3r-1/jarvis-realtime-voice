@@ -82,6 +82,8 @@ class Jarvis:
         self.response_task=None
         self.active_audio_turn=-1
         self.tts_pending=0
+        self.turn_end_at={}
+        self.output_measured=set()
         self.spec_task=None
         self.spec_queue=None
         self.spec_text=""
@@ -188,6 +190,9 @@ class Jarvis:
                     print("[backchannel]",ack)
                 if endpoint_ready(self.silence_ms,self.stable,self.probability):
                     self.capturing=False
+                    self.turn_end_at[self.turn]=time.monotonic()
+                    if len(self.turn_end_at)>50:
+                        self.turn_end_at.clear()
                     await self.to_stt("end",turn=self.turn)
                     print(f"[turn-end] silence={self.silence_ms}ms | stable={self.stable!r}")
                     self.recent.clear()
@@ -346,6 +351,21 @@ class Jarvis:
                           text=text,language=self.language(text),
                           cache_key=self.cache_key(reply_turn//10,text))
 
+    async def measure_first_output(self,turn):
+        """Callback-level first output, not a server-only packet metric."""
+        user_turn=turn//10
+        ended=self.turn_end_at.get(user_turn)
+        if ended is None:
+            return
+        for _ in range(50):
+            if turn!=self.active_audio_turn:
+                return
+            first=self.audio.first_output_time
+            if first is not None:
+                print(f"[latency] speech-end-to-audio-callback={round((first-ended)*1000)}ms")
+                return
+            await asyncio.sleep(0.02)
+
     async def listen_tts(self):
         async for raw in self.tts:
             e=json.loads(raw)
@@ -358,6 +378,10 @@ class Jarvis:
                     continue
                 pcm=np.frombuffer(base64.b64decode(e["pcm16"]),dtype="<i2").copy()
                 self.audio.enqueue(pcm)
+                received=int(e["turn"])
+                if received%10==1 and received not in self.output_measured:
+                    self.output_measured.add(received)
+                    asyncio.create_task(self.measure_first_output(received))
             elif kind=="tts_info":
                 if int(e.get("turn",-1))==self.active_audio_turn:
                     print(f"[tts] seg={e.get('segment')} compute={e.get('synthesis_ms')}ms "

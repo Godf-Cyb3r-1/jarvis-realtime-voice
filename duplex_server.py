@@ -9,6 +9,8 @@ import hmac
 import json
 import os
 import time
+import threading
+import traceback
 from collections import deque
 from typing import AsyncIterator
 import httpx
@@ -19,15 +21,22 @@ from faster_whisper import WhisperModel
 from duplex_policy import overlap_action, should_finish, split_ready
 from smart_turn_adapter import completion_probability
 from tts_engine import VoiceEngine
+from gpu_guard import inventory, index_for
 
 load_dotenv()
 RATE=16000
 TOKEN=os.getenv("VOICE_API_TOKEN","")
 if not TOKEN:raise RuntimeError("VOICE_API_TOKEN must be set")
+ASR_DEVICE=os.getenv("ASR_DEVICE","cuda")
+ASR_INDEX=index_for("ASR_GPU_INDEX",0,require_ctranslate=True) if ASR_DEVICE=="cuda" else 0
+print(f"[startup] ASR={os.getenv('ASR_MODEL','small')} device={ASR_DEVICE}:{ASR_INDEX} "
+      f"compute={os.getenv('ASR_COMPUTE','int8_float16')}",flush=True)
 ASR=WhisperModel(os.getenv("ASR_MODEL","small"),
-    device=os.getenv("ASR_DEVICE","cuda"),
-    compute_type=os.getenv("ASR_COMPUTE","float16"))
-ASR_GATE=asyncio.Lock()
+    device=ASR_DEVICE,device_index=ASR_INDEX,
+    compute_type=os.getenv("ASR_COMPUTE","int8_float16"),num_workers=1)
+# The lock must live IN the worker thread. Cancelling asyncio.to_thread
+# does not terminate the underlying GPU inference.
+ASR_THREAD_GATE=threading.Lock()
 app=FastAPI()
 voices=VoiceEngine()
 
@@ -37,11 +46,12 @@ async def transcribe(samples: np.ndarray) -> str:
     if np.sqrt(np.mean(audio**2))<0.002:
         return ""
     def run():
-        segments,_=ASR.transcribe(audio,beam_size=3,condition_on_previous_text=False,
-            vad_filter=False,language=None if os.getenv("ASR_LANGUAGE","auto")=="auto" else os.getenv("ASR_LANGUAGE"))
-        return " ".join(s.text.strip() for s in segments).strip()
-    async with ASR_GATE:
-        return await asyncio.to_thread(run)
+        with ASR_THREAD_GATE:
+            segments,_=ASR.transcribe(audio,beam_size=int(os.getenv("ASR_BEAM_SIZE","1")),
+                condition_on_previous_text=False,vad_filter=False,
+                language=None if os.getenv("ASR_LANGUAGE","auto")=="auto" else os.getenv("ASR_LANGUAGE"))
+            return " ".join(s.text.strip() for s in segments).strip()
+    return await asyncio.to_thread(run)
 
 async def llm_tokens(messages: list[dict]) -> AsyncIterator[str]:
     if os.getenv("LLM_BACKEND","api")=="local":
@@ -118,8 +128,9 @@ class Session:
 
     async def partial(self):
         if self.mode not in ("LISTEN","WAIT") or not self.samples:return
+        if os.getenv("PARTIAL_ASR_ENABLED","1")!="1":return
         if self.partial_task and not self.partial_task.done():return
-        snap=np.frombuffer(bytes(self.samples[-RATE*2*10:]),dtype="<i2").copy()
+        snap=np.frombuffer(bytes(self.samples[-RATE*2*4:]),dtype="<i2").copy()
         version=self.turn
         async def run():
             try:
@@ -171,6 +182,7 @@ class Session:
         data=bytes(self.samples)
         self.samples.clear()
         await self.state("THINK")
+        await self.emit("stage",component="asr",message="Final recognition running")
         self.committed_at=time.monotonic()
         version=self.turn
         async def run():
@@ -183,15 +195,23 @@ class Session:
                 await self.emit("metric",name="final_asr_ms",value=round((time.monotonic()-self.committed_at)*1000),turn=version)
                 await self.emit("transcript",text=transcript,turn=version)
                 self.history.append({"role":"user","content":transcript})
+                await self.emit("stage",component="llm",message="Generating reply")
                 await self.respond(version)
             except asyncio.CancelledError:raise
             except Exception as error:
-                if version==self.turn:await self.emit("error",component="response",message=str(error)[:300])
-                await self.state("IDLE")
+                if version==self.turn:
+                    detail=str(error)[:350]
+                    if "out of memory" in detail.lower():
+                        detail += " | Restart Kaggle; use ASR_MODEL=small, LLM_BACKEND=api or Qwen3-0.6B."
+                    elif "invalid device" in detail.lower():
+                        detail += " | Check GPU inventory and ASR_GPU_INDEX/TTS_GPU values."
+                    await self.emit("error",component="response",message=detail)
+                if version==self.turn:await self.state("IDLE")
         self.response_task=asyncio.create_task(run())
 
     async def send_pcm(self,audio,version,role="speech"):
         if role=="speech" and not self.first_audio and version==self.turn:
+            await self.state("SPEAK")
             self.first_audio=True
             await self.emit("metric",name="first_pcm_after_commit_ms",value=round((time.monotonic()-self.committed_at)*1000),turn=version)
         pcm=np.clip(np.asarray(audio,dtype=np.float32).reshape(-1),-1,1)
@@ -205,7 +225,7 @@ class Session:
             await asyncio.sleep(0.02)
 
     async def respond(self,version):
-        await self.state("SPEAK")
+        await self.state("THINK")
         q=asyncio.Queue(maxsize=6)
         fragments=[]
         async def produce():
@@ -230,6 +250,7 @@ class Session:
                 if version!=self.turn:return
                 if any("\u0b80"<=ch<="\u0bff" for ch in phrase):
                     language="ta"
+                await self.emit("stage",component="tts",message=f"Synthesizing {language} voice")
                 pcm=await voices.synthesize(phrase,language)
                 if version!=self.turn:return
                 await self.send_pcm(pcm,version)
@@ -262,8 +283,12 @@ class Session:
 
 @app.get("/health")
 async def health():
-    return {"ready":True,"asr_device":os.getenv("ASR_DEVICE","cuda"),
-            "tts_provider":voices.provider,"smart_turn":os.getenv("SMART_TURN_ENABLED","0")=="1"}
+    return {"ready":True,"asr_device":ASR_DEVICE,"asr_gpu_index":ASR_INDEX,
+            "asr_model":os.getenv("ASR_MODEL","small"),
+            "tts_provider":voices.provider,
+            "llm_backend":os.getenv("LLM_BACKEND","api"),
+            "smart_turn":os.getenv("SMART_TURN_ENABLED","0")=="1",
+            "gpu":inventory()}
 
 @app.websocket("/ws")
 async def duplex_websocket(ws:WebSocket):

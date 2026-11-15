@@ -123,7 +123,8 @@ async def socket(ws:WebSocket):
                         and now-current.last_partial >= float(os.getenv("STT_PARTIAL_INTERVAL","0.55"))
                         and (current.partial_task is None or current.partial_task.done())):
                     current.last_partial=now
-                    snap=bytes(current.samples)
+                    window=int(float(os.getenv("STT_PARTIAL_WINDOW_SECS","12"))*RATE*2)
+                    snap=bytes(current.samples[-max(window,RATE*2):])
                     current.partial_task=launch(partial(current,snap))
             elif kind=="pause_probe":
                 if current is None or int(msg.get("turn",-1))!=current.turn:

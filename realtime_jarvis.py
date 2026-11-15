@@ -50,7 +50,10 @@ class Memory:
                              "(SELECT id,role,content FROM conversation "
                              "ORDER BY id DESC LIMIT 14) ORDER BY id").fetchall()
         return [{"role":"system","content":SYSTEM_PROMPT+
-                 " You can pause naturally; no repeated 'ayyo' or role labels."}]+[
+                 " Sound like a thoughtful, relaxed conversational partner. "
+                 "Use [laughter] or [sigh] only where emotionally appropriate, "
+                 "not at the start of every reply. Never repeat 'ayyo' or "
+                 "include synthetic role labels."}]+[
                  {"role":r,"content":t} for r,t in rows]
 
     def add(self,role,text):

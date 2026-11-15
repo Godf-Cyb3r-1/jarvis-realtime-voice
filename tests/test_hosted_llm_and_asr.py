@@ -30,6 +30,8 @@ class HostedProviderTests(unittest.IsolatedAsyncioTestCase):
         def handler(request):
             body=json.loads(request.content)
             self.assertEqual(body["model"],"openai/gpt-oss-20b")
+            self.assertEqual(body["reasoning_effort"],"low")
+            self.assertIs(body["include_reasoning"],False)
             self.assertEqual(request.headers["authorization"],"Bearer mock-secret")
             return httpx.Response(200,text=(
                 'data: {"choices":[{"delta":{"content":"Hey! "}}]}\n\n'

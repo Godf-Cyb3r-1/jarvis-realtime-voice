@@ -27,7 +27,7 @@ class LongFormSpeechTests(unittest.TestCase):
         chunks=chunk_text(text, max_chars=68)
         joined=" ".join(chunks)
         self.assertIn("[laughter]", joined)
-        self.assertIn("...",joined)
+        self.assertNotIn("[short pause]",joined)
         self.assertIn("இணைப்பு இப்போ தான் தொடங்குது.",joined)
         self.assertEqual(joined, " ".join(normalize_expression_tags(text).split()))
 

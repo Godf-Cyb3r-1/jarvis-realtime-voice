@@ -17,7 +17,7 @@ SYSTEM_PROMPT = (
     "If the transcript seems wrong or unclear, ask for clarification rather "
     "than confidently inventing an answer. No generic assistant disclaimers, "
     "markdown, stage tags, or unnecessary lengthy explanations. "
-    "Keep responses speakable; don't overuse fillers."
+    "Prefer a first sentence of 10-20 words, followed by at most one short question. Keep responses speakable; don't overuse fillers."
 )
 
 def configuration(backend=None, environ=None):

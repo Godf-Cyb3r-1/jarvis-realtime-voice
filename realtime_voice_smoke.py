@@ -31,6 +31,28 @@ def speaker_tone():
     sd.wait()
     print("[audio] Test completed. Did you hear the tone?",flush=True)
 
+async def duplex_audio_test():
+    """Use the SAME RawStream output path that realtime_jarvis.py uses."""
+    from duplex_audio import FullDuplexAudio
+    import sounddevice as sd
+    loop=asyncio.get_running_loop()
+    duration=1.0
+    t=np.arange(int(RATE*duration),dtype=np.float32)/RATE
+    tone=(np.sin(2*np.pi*500*t)*0.18*32767).astype("<i2")
+    print("[duplex] using same RawStream path as live Jarvis",flush=True)
+    print("[duplex] PortAudio defaults:",sd.default.device,flush=True)
+    print("[duplex] MIC_DEVICE:",os.getenv("MIC_DEVICE","(default)"),
+          "SPEAKER_DEVICE:",os.getenv("SPEAKER_DEVICE","(default)"),flush=True)
+    with FullDuplexAudio(loop) as audio:
+        audio.enqueue(tone)
+        await asyncio.sleep(duration+0.4)
+        output_time=audio.first_output_time
+        print("[duplex] output callback consumed tone:",
+              output_time is not None,flush=True)
+        if output_time is None:
+            raise RuntimeError("Audio callback never consumed speaker PCM")
+    print("[duplex] Did you hear a 1-second 500 Hz tone?",flush=True)
+
 async def groq_test():
     from hosted_llm import configuration
     selected,base,model,key=configuration("groq")
@@ -114,11 +136,13 @@ async def tts_test(play:bool=True):
 
 async def main():
     parser=argparse.ArgumentParser(description="Isolate speaker, Groq and Kaggle B TTS")
-    parser.add_argument("--stage",choices=("all","audio","groq","tts"),default="all")
+    parser.add_argument("--stage",choices=("all","audio","duplex","groq","tts"),default="all")
     a=parser.parse_args()
     load_dotenv(override=True)
     if a.stage in ("all","audio"):
         speaker_tone()
+    if a.stage in ("all","duplex"):
+        await duplex_audio_test()
     if a.stage in ("all","groq"):
         await groq_test()
     if a.stage in ("all","tts"):

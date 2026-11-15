@@ -22,6 +22,8 @@ from faster_whisper import WhisperModel
 from duplex_policy import overlap_action, should_finish, split_ready
 from smart_turn_adapter import completion_probability
 from tts_engine import VoiceEngine
+from hosted_llm import SYSTEM_PROMPT, stream_reply
+from asr_quality import transcribe_audio
 from gpu_guard import inventory, index_for
 
 load_dotenv()
@@ -42,47 +44,29 @@ app=FastAPI()
 voices=VoiceEngine()
 
 async def transcribe(samples: np.ndarray) -> str:
-    if not len(samples):return ""
-    audio=np.asarray(samples,dtype=np.float32)/32768.0
-    if np.sqrt(np.mean(audio**2))<0.002:
+    if not len(samples):
         return ""
+    # A thread lock survives asyncio cancellation; old and new GPU ASR cannot
+    # run simultaneously after a quick user interruption.
     def run():
         with ASR_THREAD_GATE:
-            segments,_=ASR.transcribe(audio,beam_size=int(os.getenv("ASR_BEAM_SIZE","1")),
-                condition_on_previous_text=False,vad_filter=False,
-                language=None if os.getenv("ASR_LANGUAGE","auto")=="auto" else os.getenv("ASR_LANGUAGE"))
-            return " ".join(s.text.strip() for s in segments).strip()
+            text, language = transcribe_audio(ASR, samples)
+            if text:
+                print(f"[asr] language={language} text={text[:100]!r}", flush=True)
+            return text
     return await asyncio.to_thread(run)
 
+
 async def llm_tokens(messages: list[dict]) -> AsyncIterator[str]:
-    if os.getenv("LLM_BACKEND","api")=="local":
+    if os.getenv("LLM_BACKEND", "groq") == "local":
+        # Explicit legacy choice only; not used for the low-latency baseline.
         from local_llm import stream_local
         async for part in stream_local(messages):
             yield part
-        return
-    base=os.getenv("LLM_BASE_URL","").rstrip("/")
-    model=os.getenv("LLM_MODEL","")
-    if not base or not model:
-        yield "The speech pipeline is connected, but my language model is not configured yet."
-        return
-    headers={}
-    if os.getenv("LLM_API_KEY"):
-        headers["Authorization"]="Bearer "+os.environ["LLM_API_KEY"]
-    async with httpx.AsyncClient(timeout=httpx.Timeout(90.0,read=80.0)) as client:
-        async with client.stream("POST",base+"/chat/completions",headers=headers,
-            json={"model":model,"messages":messages[-15:],"stream":True,
-                  "temperature":0.65,"max_tokens":400}) as response:
-            response.raise_for_status()
-            async for line in response.aiter_lines():
-                if not line.startswith("data:"):continue
-                payload=line[5:].strip()
-                if payload=="[DONE]":break
-                try:
-                    item=json.loads(payload)
-                    delta=item["choices"][0].get("delta",{}).get("content","")
-                    if isinstance(delta,str) and delta:yield delta
-                except (KeyError,IndexError,ValueError):
-                    continue
+    else:
+        async for part in stream_reply(messages):
+            yield part
+
 
 class Session:
     def __init__(self,ws):
@@ -96,10 +80,7 @@ class Session:
         self.endpoint_task=None
         self.response_task=None
         self.last_backchannel=0
-        self.history=[{"role":"system","content":
-            "You are Jarvis, a warm, lively voice companion. Talk naturally in concise "
-            "English, Tamil or Tanglish as spoken by the user. Avoid robotic repetitions, "
-            "habitual greetings or filler labels. You can respond to a correction directly."}]
+        self.history=[{"role":"system","content":SYSTEM_PROMPT}]
         self.t0=time.monotonic()
         self.committed_at=self.t0
         self.first_audio=False
@@ -196,7 +177,7 @@ class Session:
                 await self.emit("metric",name="final_asr_ms",value=round((time.monotonic()-self.committed_at)*1000),turn=version)
                 await self.emit("transcript",text=transcript,turn=version)
                 self.history.append({"role":"user","content":transcript})
-                await self.emit("stage",component="llm",message="Generating reply")
+                await self.emit("stage",component="llm",message=f"Generating via {os.getenv('LLM_BACKEND','groq')}")
                 await self.respond(version)
             except asyncio.CancelledError:raise
             except Exception as error:
@@ -223,17 +204,23 @@ class Session:
             await self.emit("audio",pcm16=base64.b64encode(chunk.tobytes()).decode(),
                 rate=RATE,turn=version,role=role)
             # Backpressure; avoid flooding the client queue minutes ahead.
-            await asyncio.sleep(0.02)
+            await asyncio.sleep(len(chunk) / RATE * 0.85)
 
     async def respond(self,version):
         await self.state("THINK")
         q=asyncio.Queue(maxsize=6)
         fragments=[]
+        first_llm_token_at=None
         async def produce():
+            nonlocal first_llm_token_at
             buffer=""
             try:
                 async for delta in llm_tokens(self.history):
                     if version!=self.turn:return
+                    if first_llm_token_at is None:
+                        first_llm_token_at=time.monotonic()
+                        await self.emit("metric",name="llm_first_token_after_commit_ms",
+                            value=round((first_llm_token_at-self.committed_at)*1000),turn=version)
                     fragments.append(delta)
                     await self.emit("reply_delta",text=delta,turn=version)
                     ready,buffer=split_ready(buffer+delta)
@@ -252,7 +239,9 @@ class Session:
                 if any("\u0b80"<=ch<="\u0bff" for ch in phrase):
                     language="ta"
                 await self.emit("stage",component="tts",message=f"Synthesizing {language} voice")
+                tts_started=time.monotonic()
                 pcm=await voices.synthesize(phrase,language)
+                await self.emit("metric",name="tts_generate_ms",value=round((time.monotonic()-tts_started)*1000),turn=version)
                 if version!=self.turn:return
                 await self.send_pcm(pcm,version)
         p=asyncio.create_task(produce())
@@ -287,7 +276,7 @@ async def health():
     return {"ready":True,"asr_device":ASR_DEVICE,"asr_gpu_index":ASR_INDEX,
             "asr_model":os.getenv("ASR_MODEL","small"),
             "tts_provider":voices.provider,
-            "llm_backend":os.getenv("LLM_BACKEND","api"),
+            "llm_backend":os.getenv("LLM_BACKEND","groq"),
             "smart_turn":os.getenv("SMART_TURN_ENABLED","0")=="1",
             "gpu":inventory()}
 
@@ -308,7 +297,7 @@ async def debug_llm(payload:dict, authorization:str=Header(default="")):
         ]):
             answer.append(delta)
             if sum(map(len,answer))>1000:break
-        return {"ok":True,"backend":os.getenv("LLM_BACKEND","api"),"reply":"".join(answer)}
+        return {"ok":True,"backend":os.getenv("LLM_BACKEND","groq"),"reply":"".join(answer)}
     except Exception as exc:
         raise HTTPException(503,detail=f"LLM failed: {str(exc)[:350]}")
 

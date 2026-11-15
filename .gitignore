@@ -12,3 +12,8 @@ voices.zip
 *.log
 .env.*
 !.env.example
+
+# Local private conversation memory
+*.sqlite3
+*.sqlite3-journal
+*.db

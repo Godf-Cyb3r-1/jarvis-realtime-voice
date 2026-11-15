@@ -1,5 +1,7 @@
 # Jarvis Realtime Voice — Full-Duplex Research Prototype
 
+**Latest (November 2026):** [Temporary Groq/Gemini + Whisper recovery guide](GROQ_GEMINI_QUICK_FIX.md) | [Updated ordered Kaggle notebook](notebooks/Jarvis_Kaggle_RUN_IN_ORDER.ipynb). This replaces the old local Qwen default for low-latency voice testing. **Previous local-Qwen instructions further below are historical; do not mix their configuration with the updated notebook.**
+
 **Current version:** concurrent listening and speaking implemented, research-driven upgrades in progress. This is an engineered L0 duplex assistant, **not** a trained native full-duplex speech model and **not** yet validated end-to-end on Kaggle or Windows.
 
 ## CUDA OOM / no spoken reply?

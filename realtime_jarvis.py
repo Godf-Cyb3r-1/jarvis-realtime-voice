@@ -19,6 +19,7 @@ import webrtcvad
 import websockets
 
 from duplex_audio import FullDuplexAudio
+from voice_gate import SpeechGate
 from duplex_policy import overlap_action
 from hosted_llm import SYSTEM_PROMPT, stream_reply, configuration
 from realtime_protocol import (RATE, FRAME_MS, Hypothesis, normalized,
@@ -67,6 +68,7 @@ class Jarvis:
         self.tts=tts
         self.audio=FullDuplexAudio(loop)
         self.vad=webrtcvad.Vad(int(os.getenv("VAD_MODE","2")))
+        self.speech_gate=SpeechGate()
         self.stt_lock=asyncio.Lock()
         self.tts_lock=asyncio.Lock()
         self.memory=Memory(os.getenv("JARVIS_MEMORY_DB","jarvis_conversation.sqlite3"))
@@ -86,6 +88,9 @@ class Jarvis:
         self.active_audio_turn=-1
         self.tts_pending=0
         self.turn_end_at={}
+        self.turn_meta={}
+        self.last_accepted_turn=0
+        self.deferred_final=None
         self.output_measured=set()
         self.spec_task=None
         self.approved_spec_task=None
@@ -123,6 +128,7 @@ class Jarvis:
 
     async def start_utterance(self):
         self.turn+=1
+        self.speech_gate.reset_onset()
         self.capturing=True
         self.silence_ms=0
         self.voice_ms=0
@@ -154,17 +160,18 @@ class Jarvis:
                           pcm16=base64.b64encode(frame).decode("ascii"))
 
     async def microphone(self):
-        onset=int(os.getenv("VAD_ONSET_FRAMES","4"))
         while True:
             frame=await self.audio.mic.get()
             if len(frame)!=RATE*FRAME_MS//1000*2:
                 continue
-            voiced=self.vad.is_speech(frame,RATE)
+            # WebRTC VAD alone fired on many low-RMS frames in the user's log.
+            # During TTS, require a stronger acoustic onset before ducking.
+            bot_active=(self.audio.playing or self.tts_pending>0)
+            voiced=self.speech_gate.accept(
+                frame,self.vad.is_speech(frame,RATE),bot_active=bot_active)
             self.recent.append(frame)
             if not self.capturing:
-                self.vad_run=self.vad_run+1 if voiced else 0
-                if self.vad_run>=onset:
-                    self.vad_run=0
+                if self.speech_gate.start_ready(voiced,bot_active=bot_active):
                     await self.start_utterance()
                 continue
             await self.audio_frame(frame)
@@ -198,6 +205,12 @@ class Jarvis:
                 if endpoint_ready(self.silence_ms,self.stable,self.probability):
                     self.capturing=False
                     self.turn_end_at[self.turn]=time.monotonic()
+                    self.turn_meta[self.turn]={"overlap":self.overlap,
+                                               "yielded":self.yielded,
+                                               "voice_ms":self.voice_ms}
+                    if len(self.turn_meta)>60:
+                        for old_turn in sorted(self.turn_meta)[:-40]:
+                            self.turn_meta.pop(old_turn,None)
                     if len(self.turn_end_at)>50:
                         self.turn_end_at.clear()
                     await self.to_stt("end",turn=self.turn)
@@ -232,9 +245,7 @@ class Jarvis:
             elif kind=="final":
                 print(f"[final] {e.get('text','')} | ASR={e.get('asr_ms')}ms | lang={e.get('language')}")
                 # Preserve final events even if microphone has started a later turn.
-                task=asyncio.create_task(self.handle_final(turn,e.get("text","").strip()))
-                task.add_done_callback(lambda t: print("[final-error]",t.exception())
-                                       if not t.cancelled() and t.exception() else None)
+                await self.handle_final(turn,e.get("text","").strip())
             elif kind in ("error","warning"):
                 print("[stt-"+kind+"]",e.get("message"))
         raise ConnectionError("STT WebSocket disconnected")
@@ -273,21 +284,47 @@ class Jarvis:
         return hashlib.sha256(f"{turn}|{phrase}".encode("utf-8")).hexdigest()[:32]
 
     async def handle_final(self,turn,text):
-        if turn>self.turn or not text:
-            if not text:
-                print("[asr] ignored empty/uncertain speech")
-            self.audio.restore()
+        # STT final decoding can take ~800ms; a *new* VAD turn may already
+        # exist. Use this final's snapshot, not self.overlap/self.voice_ms.
+        meta=self.turn_meta.pop(turn,{"overlap":False,"yielded":False,
+                                       "voice_ms":0})
+        if turn<=self.last_accepted_turn:
+            print(f"[final-stale] turn {turn}, already answered a newer final")
             return
-        if self.overlap and not self.yielded:
-            decision=overlap_action(text,self.voice_ms)
-            if decision=="CONTINUE":
+        if not text:
+            print("[asr] ignored empty/uncertain speech")
+            if self.deferred_final and turn>self.deferred_final[0]:
+                pending=self.deferred_final
+                self.deferred_final=None
+                await self.commit_final(pending[0],pending[1])
+            if not self.capturing:
                 self.audio.restore()
-                print("[overlap] listener acknowledgment; continuing Jarvis")
-                self.discard_spec()
-                return
-        # Don't let an older final cancel a newer reply.
-        if turn<self.turn:
             return
+        if meta["overlap"] and not meta["yielded"]:
+            decision=overlap_action(text,meta["voice_ms"])
+            if decision=="CONTINUE":
+                if not self.capturing:
+                    self.audio.restore()
+                print("[overlap] listener acknowledgment; continuing Jarvis")
+                return
+            if decision=="HOLD":
+                if not self.capturing:
+                    self.audio.restore()
+                return
+        if turn<self.turn and self.capturing and self.voice_ms>=400:
+            # If a newer *genuine* utterance is underway, don't speak over
+            # it. Keep the older result in case newer ASR rejects empty.
+            self.deferred_final=(turn,text)
+            print(f"[final-deferred] turn {turn}, newer speech still active")
+            return
+        if self.deferred_final and self.deferred_final[0]<turn:
+            self.deferred_final=None
+        await self.commit_final(turn,text)
+
+    async def commit_final(self,turn,text):
+        if turn<=self.last_accepted_turn:
+            return
+        self.last_accepted_turn=turn
         await self.cancel_reply()
         reply_turn=turn*10+1
         self.active_audio_turn=reply_turn
@@ -298,15 +335,15 @@ class Jarvis:
             self.discard_spec()
         else:
             print("[prefill] confirmed exact transcript; reusing Groq stream")
-            # Transfer ownership of this producer to the active reply; a
-            # listener acknowledgment must not accidentally cancel it.
             self.approved_spec_task=self.spec_task
             self.spec_task=None
             self.spec_queue=None
             self.spec_text=""
         self.memory.add("user",text)
+        print(f"[reply-start] from STT turn {turn}: {text[:100]}")
         self.response_task=asyncio.create_task(self.answer(reply_turn,text,q))
-        self.audio.restore()
+        if not self.capturing:
+            self.audio.restore()
 
     async def answer(self,reply_turn,text,queue):
         version=self.generation

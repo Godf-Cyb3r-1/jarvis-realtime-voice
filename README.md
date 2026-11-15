@@ -1,5 +1,8 @@
 # Jarvis Realtime Voice — Full-Duplex Research Prototype
 
+**Fix for November 15 silent/false-interrupting Jarvis:** [37-turn log diagnosis and Windows repair steps](FIX_FALSE_VAD_AND_SILENT_OUTPUT.md). New `voice_gate.py` suppresses quiet noise triggers; delayed ASR finals are no longer silently dropped; `realtime_voice_smoke.py --stage duplex` checks the exact live speaker path. **No Kaggle restart is necessary for these Windows fixes.**
+
+
 **New two-Kaggle distributed Jarvis (research implementation):**
 [Full setup and papers](DISTRIBUTED_REALTIME_JARVIS.md) |
 [Kaggle A continuous STT notebook](notebooks/Jarvis_Kaggle_A_Continuous_STT.ipynb) |

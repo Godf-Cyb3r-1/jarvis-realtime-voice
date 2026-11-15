@@ -201,10 +201,15 @@ class Jarvis:
                 print("[stt] connected:",e.get("rate"),"Hz")
             elif kind=="partial" and turn==self.turn:
                 stable=e.get("stable","")
-                if stable and stable!=self.stable:
+                if stable!=self.stable:
                     self.stable=stable
-                    print("[partial-stable]",stable)
-                    if (self.enabled_prefill and not self.overlap and
+                    if stable:
+                        print("[partial-stable]",stable)
+                    if self.spec_task is not None and not normalized(stable).startswith(
+                            normalized(self.spec_text)):
+                        # Recognition changed its mind: invalidate speculation.
+                        self.discard_spec()
+                    if (stable and self.enabled_prefill and not self.overlap and
                             self.spec_task is None and safe_to_prefill(stable)):
                         self.spec_turn=turn
                         self.spec_text=stable

@@ -145,7 +145,9 @@ class Jarvis:
             await self.audio_frame(frame)
         if self.overlap:
             self.audio.duck(float(os.getenv("OVERLAP_DUCK_GAIN","0.25")))
-        print(f"\n[listening] turn={self.turn} | overlap={self.overlap}")
+        print(f"\\n[listening] turn={self.turn} | overlap={self.overlap} "
+              f"| onset_rms={self.speech_gate.last_rms:.4f} "
+              f"| noise_floor={self.speech_gate.noise_floor:.4f}")
 
     def discard_spec(self):
         if self.spec_task and not self.spec_task.done():
@@ -224,7 +226,7 @@ class Jarvis:
             turn=int(e.get("turn",-1))
             if kind=="ready":
                 print("[stt] connected:",e.get("rate"),"Hz")
-            elif kind=="partial" and turn==self.turn:
+            elif kind=="partial" and turn==self.turn and self.capturing:
                 stable=e.get("stable","")
                 if stable!=self.stable:
                     self.stable=stable

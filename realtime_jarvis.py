@@ -85,6 +85,7 @@ class Jarvis:
         self.turn_end_at={}
         self.output_measured=set()
         self.spec_task=None
+        self.approved_spec_task=None
         self.spec_queue=None
         self.spec_text=""
         self.spec_turn=-1
@@ -104,6 +105,9 @@ class Jarvis:
 
     async def cancel_reply(self):
         self.generation+=1
+        if self.approved_spec_task and not self.approved_spec_task.done():
+            self.approved_spec_task.cancel()
+        self.approved_spec_task=None
         if self.response_task and not self.response_task.done():
             self.response_task.cancel()
         self.response_task=None
@@ -239,7 +243,7 @@ class Jarvis:
         try:
             async for delta in stream_reply(self.memory.messages()+[
                     {"role":"user","content":stable}]):
-                if turn!=self.turn:
+                if turn!=self.turn and asyncio.current_task() is not self.approved_spec_task:
                     return
                 await q.put(delta)
                 all_text+=delta
@@ -291,7 +295,12 @@ class Jarvis:
             self.discard_spec()
         else:
             print("[prefill] confirmed exact transcript; reusing Groq stream")
-            # Speculative producer is intentionally allowed to continue.
+            # Transfer ownership of this producer to the active reply; a
+            # listener acknowledgment must not accidentally cancel it.
+            self.approved_spec_task=self.spec_task
+            self.spec_task=None
+            self.spec_queue=None
+            self.spec_text=""
         self.memory.add("user",text)
         self.response_task=asyncio.create_task(self.answer(reply_turn,text,q))
         self.audio.restore()
